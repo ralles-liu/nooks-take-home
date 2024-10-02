@@ -27,10 +27,16 @@ state = {
 }
 loop = asyncio.new_event_loop()
 
+user_stopped_talking_timestamp = 0
+
 
 async def handle_text(text):
     if text != "":
         ai_response = await chatbot.async_generate_response(text)
+        print(
+            "latency to generate response",
+            time.time() - user_stopped_talking_timestamp,
+        )
         while True:
             if state["silence_duration"] >= WAIT_TIME:
                 break
@@ -39,18 +45,23 @@ async def handle_text(text):
         print(f"USER: {state['last_text']}")
         print(f"AI: {ai_response}")
         await speak_stream(ai_response)
+        print(
+            "latency to finish talking",
+            time.time() - user_stopped_talking_timestamp,
+        )
 
 
 def callback(in_data, *_):
     global loop
+    global user_stopped_talking_timestamp
     signal = np.frombuffer(in_data, dtype=np.int16)
     text = transcriber.transcribe_chunk(signal)
     # uncomment to easily track whats going on in callback
     # print("ralles text", text)
     if text != state["last_text"]:
-        print("ralles reset state in callback")
         state["last_text"] = text
         state["silence_duration"] = 0
+        user_stopped_talking_timestamp = time.time()
         if state["background_task"]:
             state["background_task"].cancel()
             state["background_task"] = None
